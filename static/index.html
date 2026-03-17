@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Amazon 価格追跡</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f0f2f5;
+      --card: #ffffff;
+      --primary: #ff9900;
+      --primary-dark: #e68a00;
+      --danger: #e53935;
+      --danger-light: #ffebee;
+      --success: #2e7d32;
+      --success-light: #e8f5e9;
+      --text: #1a1a2e;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --shadow: 0 2px 12px rgba(0,0,0,.08);
+      --radius: 14px;
+    }
+
+    body {
+      font-family: "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ─── Header ─── */
+    header {
+      background: linear-gradient(135deg, #232f3e 0%, #37475a 100%);
+      color: #fff;
+      padding: 0 24px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.25);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    header .logo { font-size: 22px; font-weight: 700; color: var(--primary); letter-spacing: -0.5px; }
+    header .subtitle { font-size: 13px; color: #aab; }
+    header .spacer { flex: 1; }
+    #checkAllBtn {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    #checkAllBtn:hover { background: var(--primary-dark); }
+    #checkAllBtn:disabled { opacity: .6; cursor: not-allowed; }
+
+    /* ─── Main ─── */
+    main { max-width: 960px; margin: 32px auto; padding: 0 20px; }
+
+    /* ─── Add form ─── */
+    .add-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 24px;
+      box-shadow: var(--shadow);
+      margin-bottom: 28px;
+    }
+    .add-card h2 { font-size: 16px; font-weight: 700; margin-bottom: 16px; color: var(--text); }
+    .form-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .form-row input {
+      flex: 1 1 280px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 14px;
+      outline: none;
+      transition: border .2s;
+      background: #fafafa;
+    }
+    .form-row input:focus { border-color: var(--primary); background: #fff; }
+    .form-row input.url-input { flex: 3 1 340px; }
+    .form-row input.price-input { flex: 1 1 150px; }
+    .form-row button[type="submit"] {
+      background: #232f3e;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .2s;
+      white-space: nowrap;
+    }
+    .form-row button[type="submit"]:hover { background: #37475a; }
+    .form-row button[type="submit"]:disabled { opacity: .6; cursor: not-allowed; }
+    .form-hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
+
+    /* ─── Alert banner ─── */
+    .alert {
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: 13px;
+      margin-top: 12px;
+      display: none;
+    }
+    .alert.error { background: var(--danger-light); color: var(--danger); border: 1px solid #ffcdd2; display: block; }
+    .alert.success { background: var(--success-light); color: var(--success); border: 1px solid #c8e6c9; display: block; }
+
+    /* ─── Stats bar ─── */
+    .stats-bar {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .stat-chip {
+      background: var(--card);
+      border-radius: 10px;
+      padding: 10px 18px;
+      font-size: 13px;
+      box-shadow: var(--shadow);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .stat-chip .num { font-size: 20px; font-weight: 700; }
+    .stat-chip.alert-chip .num { color: var(--danger); }
+    .stat-chip.ok-chip .num { color: var(--success); }
+
+    /* ─── Product grid ─── */
+    .products-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .product-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      display: flex;
+      gap: 16px;
+      padding: 18px;
+      align-items: flex-start;
+      border-left: 4px solid transparent;
+      transition: box-shadow .2s, transform .15s;
+      position: relative;
+    }
+    .product-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,.12); transform: translateY(-1px); }
+    .product-card.below-target { border-left-color: var(--danger); background: linear-gradient(to right, #fff5f5, #fff); }
+    .product-card.above-target { border-left-color: #4caf50; }
+
+    .product-img {
+      width: 80px;
+      height: 80px;
+      object-fit: contain;
+      border-radius: 8px;
+      background: #f5f5f5;
+      flex-shrink: 0;
+    }
+    .product-img-placeholder {
+      width: 80px;
+      height: 80px;
+      border-radius: 8px;
+      background: #f0f0f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      flex-shrink: 0;
+    }
+
+    .product-body { flex: 1; min-width: 0; }
+    .product-name {
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.4;
+      margin-bottom: 4px;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+    .product-name a { color: var(--text); text-decoration: none; }
+    .product-name a:hover { color: var(--primary-dark); }
+    .product-meta { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+
+    .price-row {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .current-price {
+      font-size: 26px;
+      font-weight: 800;
+      color: var(--text);
+    }
+    .current-price.below { color: var(--danger); }
+    .current-price.no-price { font-size: 16px; color: var(--muted); font-weight: 400; }
+
+    .target-label {
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .target-value { font-weight: 600; color: var(--text); }
+
+    .diff-badge {
+      font-size: 11px;
+      border-radius: 99px;
+      padding: 2px 8px;
+      font-weight: 700;
+    }
+    .diff-badge.down { background: #ffebee; color: var(--danger); }
+    .diff-badge.up   { background: #e8f5e9; color: var(--success); }
+
+    /* ─── History mini chart ─── */
+    .history-section { margin-top: 10px; }
+    .history-toggle {
+      font-size: 12px;
+      color: var(--primary-dark);
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 0;
+      font-weight: 600;
+    }
+    .history-list {
+      display: none;
+      margin-top: 8px;
+      border-top: 1px solid var(--border);
+      padding-top: 8px;
+    }
+    .history-list.open { display: block; }
+    .history-entry {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      padding: 3px 0;
+      color: var(--muted);
+      border-bottom: 1px solid #f3f4f6;
+    }
+    .history-entry .h-price { font-weight: 600; color: var(--text); }
+    .history-entry .h-error { color: var(--danger); }
+
+    /* ─── Card actions ─── */
+    .product-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: flex-end;
+      flex-shrink: 0;
+    }
+    .btn-icon {
+      border: none;
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s, transform .1s;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+    .btn-icon:active { transform: scale(.96); }
+    .btn-check { background: #e8f0fe; color: #1a73e8; }
+    .btn-check:hover { background: #d2e3fc; }
+    .btn-delete { background: #fce8e6; color: var(--danger); }
+    .btn-delete:hover { background: #f9c7c5; }
+    .btn-edit-target { background: #fff8e1; color: #f57f17; }
+    .btn-edit-target:hover { background: #fff3cd; }
+
+    /* ─── Edit target inline ─── */
+    .edit-target-row {
+      display: none;
+      margin-top: 8px;
+      gap: 6px;
+      align-items: center;
+    }
+    .edit-target-row.open { display: flex; }
+    .edit-target-row input {
+      border: 1.5px solid var(--primary);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 13px;
+      width: 120px;
+      outline: none;
+    }
+    .edit-target-row .btn-save { background: var(--primary); color: #fff; }
+    .edit-target-row .btn-save:hover { background: var(--primary-dark); }
+    .edit-target-row .btn-cancel { background: var(--border); color: var(--muted); }
+
+    /* ─── Empty state ─── */
+    .empty-state {
+      text-align: center;
+      padding: 64px 20px;
+      color: var(--muted);
+    }
+    .empty-state .icon { font-size: 52px; margin-bottom: 12px; }
+    .empty-state p { font-size: 15px; }
+
+    /* ─── Loading spinner ─── */
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255,255,255,.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── Notification toast ─── */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #323232;
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 13px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.3);
+      transform: translateY(80px);
+      opacity: 0;
+      transition: all .3s;
+      z-index: 1000;
+      max-width: 320px;
+    }
+    #toast.show { transform: translateY(0); opacity: 1; }
+    #toast.warning { background: #b71c1c; }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 600px) {
+      .product-card { flex-wrap: wrap; }
+      .product-actions { flex-direction: row; flex-wrap: wrap; }
+      .current-price { font-size: 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="logo">Amazon</span>
+  <span style="color:var(--primary);font-size:20px">📦</span>
+  <span class="subtitle">価格追跡ダッシュボード</span>
+  <span class="spacer"></span>
+  <button id="checkAllBtn" onclick="checkAll()">
+    <span>🔄</span> 全商品チェック
+  </button>
+</header>
+
+<main>
+  <!-- 追加フォーム -->
+  <div class="add-card">
+    <h2>+ 新しい商品を追加</h2>
+    <form id="addForm" onsubmit="addProduct(event)">
+      <div class="form-row">
+        <input
+          class="url-input"
+          type="url"
+          id="urlInput"
+          placeholder="Amazon商品URLを貼り付け (例: https://www.amazon.co.jp/dp/...)"
+          required
+        />
+        <input
+          class="price-input"
+          type="number"
+          id="targetInput"
+          placeholder="目標価格 (円)"
+          min="0"
+          step="1"
+        />
+        <button type="submit" id="addBtn">追加</button>
+      </div>
+      <p class="form-hint">目標価格以下になると赤く表示されます。目標価格は省略可能です。</p>
+      <div class="alert" id="formAlert"></div>
+    </form>
+  </div>
+
+  <!-- 統計 -->
+  <div class="stats-bar" id="statsBar" style="display:none">
+    <div class="stat-chip">
+      <span>追跡中</span>
+      <span class="num" id="totalCount">0</span>
+      <span>商品</span>
+    </div>
+    <div class="stat-chip alert-chip">
+      <span>🔴</span>
+      <span class="num" id="alertCount">0</span>
+      <span>件が目標価格以下</span>
+    </div>
+    <div class="stat-chip" style="margin-left:auto; font-size:12px; color:var(--muted)">
+      最終更新: <span id="lastUpdated">—</span>
+    </div>
+  </div>
+
+  <!-- 商品一覧 -->
+  <div class="products-grid" id="productsGrid"></div>
+
+  <div id="toast"></div>
+</main>
+
+<script>
+const API = "";  // 同一オリジン
+
+/* ─── Toast ─────────────────────────────────── */
+function showToast(msg, isWarning = false) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = "show" + (isWarning ? " warning" : "");
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.className = ""; }, 3500);
+}
+
+/* ─── 価格フォーマット ───────────────────────── */
+function fmt(price) {
+  if (price == null) return null;
+  return "¥" + Number(price).toLocaleString("ja-JP", { maximumFractionDigits: 0 });
+}
+
+/* ─── 日時フォーマット ───────────────────────── */
+function fmtDate(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleDateString("ja-JP") + " " + d.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
+}
+
+/* ─── 統計更新 ───────────────────────────────── */
+function updateStats(products) {
+  const bar = document.getElementById("statsBar");
+  if (!products.length) { bar.style.display = "none"; return; }
+  bar.style.display = "flex";
+  document.getElementById("totalCount").textContent = products.length;
+  const alerts = products.filter(p =>
+    p.current_price != null && p.target_price != null && p.current_price <= p.target_price
+  ).length;
+  document.getElementById("alertCount").textContent = alerts;
+  const latest = products
+    .map(p => p.last_checked)
+    .filter(Boolean)
+    .sort()
+    .pop();
+  document.getElementById("lastUpdated").textContent = fmtDate(latest);
+}
+
+/* ─── 商品カード描画 ─────────────────────────── */
+function renderProducts(products) {
+  const grid = document.getElementById("productsGrid");
+  updateStats(products);
+
+  if (!products.length) {
+    grid.innerHTML = `<div class="empty-state">
+      <div class="icon">🛒</div>
+      <p>追跡中の商品がありません。<br>上のフォームからAmazon商品URLを追加してください。</p>
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = products.map(p => {
+    const hasPrice = p.current_price != null;
+    const hasTarget = p.target_price != null;
+    const isBelow = hasPrice && hasTarget && p.current_price <= p.target_price;
+    const isAbove = hasPrice && hasTarget && p.current_price > p.target_price;
+
+    const cardClass = isBelow ? "below-target" : isAbove ? "above-target" : "";
+    const priceClass = isBelow ? "below" : "";
+
+    let diffBadge = "";
+    if (hasPrice && hasTarget) {
+      const diff = p.current_price - p.target_price;
+      const sign = diff < 0 ? "▼" : "▲";
+      const cls  = diff < 0 ? "down" : "up";
+      diffBadge = `<span class="diff-badge ${cls}">${sign} ${fmt(Math.abs(diff))}</span>`;
+    }
+
+    const historyItems = (p.history || []).slice().reverse().slice(0, 10).map(h =>
+      `<div class="history-entry">
+        <span>${fmtDate(h.checked_at)}</span>
+        ${h.price != null
+          ? `<span class="h-price">${fmt(h.price)}</span>`
+          : `<span class="h-error">${h.error || "取得失敗"}</span>`}
+      </div>`
+    ).join("");
+
+    const imgEl = p.image
+      ? `<img class="product-img" src="${p.image}" alt="商品画像" onerror="this.style.display='none'" />`
+      : `<div class="product-img-placeholder">📦</div>`;
+
+    return `
+    <div class="product-card ${cardClass}" id="card-${p.id}">
+      ${imgEl}
+      <div class="product-body">
+        <div class="product-name">
+          <a href="${p.url}" target="_blank" rel="noopener">${p.name}</a>
+          ${isBelow ? '<span style="font-size:18px;margin-left:4px" title="目標価格以下！">🔴</span>' : ""}
+        </div>
+        <div class="product-meta">最終チェック: ${fmtDate(p.last_checked)}</div>
+
+        <div class="price-row">
+          ${hasPrice
+            ? `<span class="current-price ${priceClass}">${fmt(p.current_price)}</span>`
+            : `<span class="current-price no-price">価格取得中…</span>`}
+          ${hasTarget
+            ? `<span class="target-label">目標 <span class="target-value">${fmt(p.target_price)}</span></span> ${diffBadge}`
+            : `<span class="target-label" style="color:#bbb">目標未設定</span>`}
+        </div>
+
+        <!-- 目標価格編集 -->
+        <div class="edit-target-row" id="edit-${p.id}">
+          <input type="number" id="editInput-${p.id}" placeholder="目標価格 (円)" value="${p.target_price ?? ""}" min="0" />
+          <button class="btn-icon btn-save" onclick="saveTarget('${p.id}')">保存</button>
+          <button class="btn-icon btn-cancel" onclick="cancelEdit('${p.id}')">キャンセル</button>
+        </div>
+
+        <!-- 履歴 -->
+        <div class="history-section">
+          <button class="history-toggle" onclick="toggleHistory('${p.id}')">📋 価格履歴を表示</button>
+          <div class="history-list" id="hist-${p.id}">
+            ${historyItems || "<div style='font-size:12px;color:var(--muted)'>履歴なし</div>"}
+          </div>
+        </div>
+      </div>
+
+      <div class="product-actions">
+        <button class="btn-icon btn-check" onclick="checkOne('${p.id}')">🔄 今すぐチェック</button>
+        <button class="btn-icon btn-edit-target" onclick="openEdit('${p.id}')">✏️ 目標価格</button>
+        <button class="btn-icon btn-delete" onclick="deleteProduct('${p.id}')">🗑️ 削除</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+/* ─── 全商品取得 ─────────────────────────────── */
+async function loadProducts() {
+  const res = await fetch(`${API}/api/products`);
+  const products = await res.json();
+  renderProducts(products);
+}
+
+/* ─── 商品追加 ───────────────────────────────── */
+async function addProduct(e) {
+  e.preventDefault();
+  const url    = document.getElementById("urlInput").value.trim();
+  const target = document.getElementById("targetInput").value;
+  const btn    = document.getElementById("addBtn");
+  const alert  = document.getElementById("formAlert");
+
+  alert.className = "alert";
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> 取得中…';
+
+  try {
+    const res = await fetch(`${API}/api/products`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url, target_price: target === "" ? null : Number(target) }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert.textContent = data.error || "エラーが発生しました";
+      alert.className = "alert error";
+      return;
+    }
+    if (data.warning) {
+      showToast("⚠️ " + data.warning, true);
+    } else {
+      showToast("✅ 商品を追加しました");
+    }
+    document.getElementById("urlInput").value = "";
+    document.getElementById("targetInput").value = "";
+    loadProducts();
+  } catch (err) {
+    alert.textContent = "サーバーに接続できません。server.py が起動しているか確認してください。";
+    alert.className = "alert error";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "追加";
+  }
+}
+
+/* ─── 今すぐチェック（単品）─────────────────── */
+async function checkOne(id) {
+  const btn = document.querySelector(`#card-${id} .btn-check`);
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner" style="border-top-color:#1a73e8"></span> チェック中'; }
+  try {
+    const res = await fetch(`${API}/api/products/${id}/check`, { method: "POST" });
+    const data = await res.json();
+    if (data.warning) showToast("⚠️ " + data.warning, true);
+    else showToast("✅ 価格を更新しました");
+    loadProducts();
+  } catch {
+    showToast("エラーが発生しました", true);
+  }
+}
+
+/* ─── 全商品チェック ─────────────────────────── */
+async function checkAll() {
+  const btn = document.getElementById("checkAllBtn");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> チェック中…';
+  try {
+    const res = await fetch(`${API}/api/check-all`, { method: "POST" });
+    const products = await res.json();
+    renderProducts(products);
+    showToast("✅ 全商品の価格を更新しました");
+  } catch {
+    showToast("エラーが発生しました", true);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<span>🔄</span> 全商品チェック';
+  }
+}
+
+/* ─── 削除 ───────────────────────────────────── */
+async function deleteProduct(id) {
+  if (!confirm("この商品の追跡を削除しますか？")) return;
+  await fetch(`${API}/api/products/${id}`, { method: "DELETE" });
+  showToast("🗑️ 削除しました");
+  loadProducts();
+}
+
+/* ─── 目標価格編集 ───────────────────────────── */
+function openEdit(id) {
+  document.getElementById(`edit-${id}`).className = "edit-target-row open";
+  document.getElementById(`editInput-${id}`).focus();
+}
+function cancelEdit(id) {
+  document.getElementById(`edit-${id}`).className = "edit-target-row";
+}
+async function saveTarget(id) {
+  const val = document.getElementById(`editInput-${id}`).value;
+  const res = await fetch(`${API}/api/products/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target_price: val === "" ? null : Number(val) }),
+  });
+  const data = await res.json();
+  if (data.error) { showToast("❌ " + data.error, true); return; }
+  showToast("✅ 目標価格を更新しました");
+  loadProducts();
+}
+
+/* ─── 履歴トグル ─────────────────────────────── */
+function toggleHistory(id) {
+  const el = document.getElementById(`hist-${id}`);
+  const btn = el.previousElementSibling;
+  if (el.classList.contains("open")) {
+    el.classList.remove("open");
+    btn.textContent = "📋 価格履歴を表示";
+  } else {
+    el.classList.add("open");
+    btn.textContent = "📋 価格履歴を隠す";
+  }
+}
+
+/* ─── 初期化 ─────────────────────────────────── */
+loadProducts();
+</script>
+</body>
+</html>

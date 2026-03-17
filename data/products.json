@@ -1,0 +1,21 @@
+{
+  "products": [
+    {
+      "id": "0f7ed551-e03f-4725-84c2-b8476fb8002e",
+      "url": "https://www.amazon.co.jp/%E3%82%A8%E3%83%93%E3%82%AA%E3%82%B9-%E3%80%90%E6%8C%87%E5%AE%9A%E5%8C%BB%E8%96%AC%E9%83%A8%E5%A4%96%E5%93%81%E3%80%91%E3%82%A8%E3%83%93%E3%82%AA%E3%82%B9%E9%8C%A0-1200%E9%8C%A0/dp/B000FQQ7RO/?_encoding=UTF8&pd_rd_w=pYiuO&content-id=amzn1.sym.faf9973e-4d8c-40ec-aca3-abae39351aba&pf_rd_p=faf9973e-4d8c-40ec-aca3-abae39351aba&pf_rd_r=BH6XBKMTHMJDJ2X8D610&pd_rd_wg=0gjoa&pd_rd_r=76026317-7339-45de-93f9-9d5cf7072de5&ref_=pd_hp_d_btf_pd_pss_gwp_d_0&th=1",
+      "name": "エビオス錠 1200錠 【指定医薬部外品】胃腸・栄養補給薬",
+      "image": "https://m.media-amazon.com/images/I/81PLYHVJwoL._AC_SY300_SX300_QL70_ML2_.jpg",
+      "target_price": 1550.0,
+      "current_price": 1526.0,
+      "last_checked": "2026-03-17T17:14:38.071647",
+      "added_at": "2026-03-17T17:14:38.071655",
+      "history": [
+        {
+          "checked_at": "2026-03-17T17:14:38.071657",
+          "price": 1526.0,
+          "error": null
+        }
+      ]
+    }
+  ]
+}
