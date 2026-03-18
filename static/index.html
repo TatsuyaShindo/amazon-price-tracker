@@ -458,35 +458,53 @@
 
 <!-- 設定モーダル -->
 <div class="modal-overlay" id="settingsModal" onclick="closeSettingsOutside(event)">
-  <div class="modal">
+  <div class="modal" style="max-width:520px">
     <h2>⚙️ 設定</h2>
-    <p class="modal-sub">メール通知の設定を行います（Gmailのアプリパスワードを使用）</p>
+    <p class="modal-sub">通知方法を設定します。どちらか一方だけでも使えます。</p>
 
-    <div class="modal-section">
-      <label>通知先メールアドレス</label>
-      <input type="email" id="notifyEmail" placeholder="通知を受け取るメールアドレス" />
-    </div>
-    <div class="modal-section">
-      <label>送信元 Gmail アドレス</label>
-      <input type="email" id="smtpUser" placeholder="送信に使うGmailアドレス" />
-    </div>
-    <div class="modal-section">
-      <label>Gmailアプリパスワード <span style="font-weight:400;color:var(--muted)">（Googleアカウント → セキュリティ → アプリパスワード）</span></label>
-      <input type="password" id="smtpPassword" placeholder="入力済みの場合は空欄でOK" />
-    </div>
-    <div class="modal-section">
-      <label>SMTPホスト / ポート</label>
-      <div class="modal-row">
-        <input type="text" id="smtpHost" value="smtp.gmail.com" />
-        <input type="number" id="smtpPort" value="587" />
+    <!-- Chatwork -->
+    <div style="border:1.5px solid #e5e7eb;border-radius:10px;padding:16px;margin-bottom:16px">
+      <div style="font-weight:700;font-size:14px;margin-bottom:12px;color:#1a1a2e">💬 Chatwork通知</div>
+      <div class="modal-section">
+        <label>APIトークン <a href="https://www.chatwork.com/service/packages/chatwork/subpackages/api/token.php" target="_blank" style="font-weight:400;color:var(--primary-dark);font-size:11px">取得方法 →</a></label>
+        <input type="password" id="chatworkToken" placeholder="入力済みの場合は空欄でOK" />
       </div>
+      <div class="modal-section" style="margin-bottom:0">
+        <label>ルームID <span style="font-weight:400;color:var(--muted);font-size:11px">（チャットルームのURLの数字部分）</span></label>
+        <input type="text" id="chatworkRoomId" placeholder="例: 123456789" />
+      </div>
+      <button class="btn-icon btn-check" style="margin-top:10px;font-size:12px" onclick="testChatwork()">💬 Chatworkテスト送信</button>
+    </div>
+
+    <!-- Gmail -->
+    <div style="border:1.5px solid #e5e7eb;border-radius:10px;padding:16px">
+      <div style="font-weight:700;font-size:14px;margin-bottom:12px;color:#1a1a2e">📧 メール通知（Gmail）</div>
+      <div class="modal-section">
+        <label>通知先メールアドレス</label>
+        <input type="email" id="notifyEmail" placeholder="通知を受け取るメールアドレス" />
+      </div>
+      <div class="modal-section">
+        <label>送信元 Gmail アドレス（通知先と同じでもOK）</label>
+        <input type="email" id="smtpUser" placeholder="Gmailアドレス" />
+      </div>
+      <div class="modal-section">
+        <label>Gmailアプリパスワード <a href="https://myaccount.google.com/apppasswords" target="_blank" style="font-weight:400;color:var(--primary-dark);font-size:11px">発行方法 →</a></label>
+        <input type="password" id="smtpPassword" placeholder="入力済みの場合は空欄でOK" />
+      </div>
+      <div class="modal-section" style="margin-bottom:0">
+        <label>SMTPホスト / ポート</label>
+        <div class="modal-row">
+          <input type="text" id="smtpHost" value="smtp.gmail.com" />
+          <input type="number" id="smtpPort" value="587" />
+        </div>
+      </div>
+      <button class="btn-icon btn-check" style="margin-top:10px;font-size:12px" onclick="testEmail()">📧 メールテスト送信</button>
     </div>
 
     <div class="modal-alert" id="settingsAlert"></div>
 
     <div class="modal-actions">
-      <button class="btn-test-email" onclick="testEmail()">📧 テスト送信</button>
-      <button class="btn-save-settings" onclick="saveSettings()">保存</button>
+      <button class="btn-save-settings" onclick="saveSettings()">💾 保存</button>
       <button class="btn-close-modal" onclick="closeSettings()">閉じる</button>
     </div>
   </div>
@@ -810,6 +828,9 @@ async function openSettings() {
   try {
     const res = await fetch(`${API}/api/settings`, { credentials: "include" });
     const s = await res.json();
+    document.getElementById("chatworkRoomId").value = s.chatwork_room_id || "";
+    document.getElementById("chatworkToken").placeholder = s.chatwork_token_set
+      ? "設定済み（変更する場合のみ入力）" : "APIトークンを入力";
     document.getElementById("notifyEmail").value = s.notify_email || "";
     document.getElementById("smtpUser").value = s.smtp_user || "";
     document.getElementById("smtpHost").value = s.smtp_host || "smtp.gmail.com";
@@ -835,9 +856,12 @@ async function saveSettings() {
     smtp_user: document.getElementById("smtpUser").value.trim(),
     smtp_host: document.getElementById("smtpHost").value.trim(),
     smtp_port: parseInt(document.getElementById("smtpPort").value),
+    chatwork_room_id: document.getElementById("chatworkRoomId").value.trim(),
   };
   const pw = document.getElementById("smtpPassword").value;
   if (pw) body.smtp_password = pw;
+  const cwToken = document.getElementById("chatworkToken").value;
+  if (cwToken) body.chatwork_token = cwToken;
   try {
     const res = await fetch(`${API}/api/settings`, {
       method: "POST",
@@ -851,6 +875,29 @@ async function saveSettings() {
       alertEl.className = "modal-alert success";
     } else {
       alertEl.textContent = "❌ " + (data.error || "保存失敗");
+      alertEl.className = "modal-alert error";
+    }
+  } catch {
+    alertEl.textContent = "❌ サーバーエラー";
+    alertEl.className = "modal-alert error";
+  }
+}
+
+async function testChatwork() {
+  const alertEl = document.getElementById("settingsAlert");
+  alertEl.textContent = "💬 送信中…";
+  alertEl.className = "modal-alert success";
+  try {
+    const res = await fetch(`${API}/api/settings/test-chatwork`, {
+      method: "POST",
+      credentials: "include",
+    });
+    const data = await res.json();
+    if (res.ok) {
+      alertEl.textContent = "✅ Chatworkにテスト通知を送信しました！";
+      alertEl.className = "modal-alert success";
+    } else {
+      alertEl.textContent = "❌ " + (data.error || "送信失敗");
       alertEl.className = "modal-alert error";
     }
   } catch {

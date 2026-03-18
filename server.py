@@ -80,6 +80,8 @@ def load_settings() -> dict:
         "smtp_port": 587,
         "smtp_user": "",
         "smtp_password": "",
+        "chatwork_token": "",
+        "chatwork_room_id": "",
     }
 
 
@@ -137,6 +139,42 @@ def send_email_notification(products_below: list) -> None:
         logger.info("メール通知送信完了: %s 件", len(products_below))
     except Exception as e:
         logger.error("メール送信失敗: %s", e)
+
+
+# ── Chatwork 通知 ─────────────────────────────────────────────────────
+
+def send_chatwork_notification(products_below: list) -> None:
+    if not products_below:
+        return
+    settings = load_settings()
+    token = settings.get("chatwork_token", "")
+    room_id = settings.get("chatwork_room_id", "")
+    if not token or not room_id:
+        logger.info("Chatwork設定未完了のため通知スキップ")
+        return
+
+    lines = ["[info][title]🔴 Amazon価格追跡 - 目標価格以下の商品があります[/title]"]
+    for p in products_below:
+        diff = int(p["target_price"] - p["current_price"])
+        lines.append(
+            f"■ {p['name'][:50]}\n"
+            f"  現在価格: ¥{int(p['current_price']):,}  目標: ¥{int(p['target_price']):,}  (¥{diff:,} お得)\n"
+            f"  {p['url']}"
+        )
+    lines.append("[/info]")
+    message = "\n".join(lines)
+
+    try:
+        resp = requests.post(
+            f"https://api.chatwork.com/v2/rooms/{room_id}/messages",
+            headers={"X-ChatWorkToken": token},
+            data={"body": message},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        logger.info("Chatwork通知送信完了: %s 件", len(products_below))
+    except Exception as e:
+        logger.error("Chatwork通知失敗: %s", e)
 
 
 # ── スクレイピング ─────────────────────────────────────────────────────
@@ -227,6 +265,7 @@ def check_all_prices() -> None:
 
     save_data(data)
     send_email_notification(products_below)
+    send_chatwork_notification(products_below)
     logger.info("価格チェック完了")
 
 
@@ -275,6 +314,8 @@ def get_settings():
         "smtp_port": s.get("smtp_port", 587),
         "smtp_user": s.get("smtp_user", ""),
         "smtp_password_set": bool(s.get("smtp_password")),
+        "chatwork_token_set": bool(s.get("chatwork_token")),
+        "chatwork_room_id": s.get("chatwork_room_id", ""),
     })
 
 
@@ -283,11 +324,13 @@ def get_settings():
 def update_settings():
     body = request.get_json(silent=True) or {}
     settings = load_settings()
-    for key in ["notify_email", "smtp_host", "smtp_port", "smtp_user"]:
+    for key in ["notify_email", "smtp_host", "smtp_port", "smtp_user", "chatwork_room_id"]:
         if key in body:
             settings[key] = body[key]
     if body.get("smtp_password"):
         settings["smtp_password"] = body["smtp_password"]
+    if body.get("chatwork_token"):
+        settings["chatwork_token"] = body["chatwork_token"]
     save_settings(settings)
     return jsonify({"ok": True})
 
@@ -308,6 +351,25 @@ def test_email():
             server.starttls()
             server.login(settings["smtp_user"], settings["smtp_password"])
             server.sendmail(settings["smtp_user"], settings["notify_email"], msg.as_string())
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/settings/test-chatwork", methods=["POST"])
+@login_required
+def test_chatwork():
+    settings = load_settings()
+    if not (settings.get("chatwork_token") and settings.get("chatwork_room_id")):
+        return jsonify({"error": "ChatworkのAPIトークンとルームIDを入力してください"}), 400
+    try:
+        resp = requests.post(
+            f"https://api.chatwork.com/v2/rooms/{settings['chatwork_room_id']}/messages",
+            headers={"X-ChatWorkToken": settings["chatwork_token"]},
+            data={"body": "✅ Amazon価格追跡アプリのテスト通知です。正常に連携できています！"},
+            timeout=10,
+        )
+        resp.raise_for_status()
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
