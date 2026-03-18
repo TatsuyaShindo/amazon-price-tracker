@@ -82,6 +82,7 @@ def load_settings() -> dict:
         "smtp_password": "",
         "chatwork_token": "",
         "chatwork_room_id": "",
+        "keepa_api_key": "",
     }
 
 
@@ -177,7 +178,82 @@ def send_chatwork_notification(products_below: list) -> None:
         logger.error("Chatwork通知失敗: %s", e)
 
 
+# ── Keepa API ─────────────────────────────────────────────────────────
+
+# Keepa ドメインコード（amazon.co.jp = 5）
+KEEPA_DOMAIN = 5
+
+def fetch_price_via_keepa(asin: str, api_key: str) -> dict:
+    """
+    Keepa API で価格・商品名・画像を取得する。
+    価格は Keepa 内部単位（円×100）で返されるため 100 で割る。
+    """
+    if not api_key or not asin:
+        return {"error": "Keepa APIキーまたはASINが未設定です"}
+
+    url = (
+        f"https://api.keepa.com/product"
+        f"?key={api_key}&domain={KEEPA_DOMAIN}&asin={asin}&stats=1"
+    )
+    try:
+        resp = requests.get(url, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        return {"error": f"Keepa API リクエスト失敗: {e}"}
+
+    if data.get("error"):
+        return {"error": f"Keepa API エラー: {data['error'].get('message', '不明')}"}
+
+    products = data.get("products") or []
+    if not products:
+        return {"error": "Keepa API: 商品が見つかりませんでした"}
+
+    product = products[0]
+
+    # 商品名
+    name = product.get("title") or "商品名不明"
+
+    # 画像（カンマ区切りの先頭）
+    images_csv = product.get("imagesCSV", "")
+    first_image = images_csv.split(",")[0] if images_csv else ""
+    image = f"https://images-na.ssl-images-amazon.com/images/I/{first_image}" if first_image else ""
+
+    # 現在価格（stats.current: [Amazon価格, 新品マーケット, ...] 単位=円×100）
+    stats = product.get("stats") or {}
+    current = stats.get("current") or []
+
+    price_raw = None
+    # インデックス0=Amazon直販, 1=新品出品者（いずれか有効な方を使用）
+    for idx in [0, 1, 7, 11]:
+        if idx < len(current) and current[idx] is not None and current[idx] > 0:
+            price_raw = current[idx]
+            break
+
+    if price_raw is None:
+        return {"error": "Keepa API: 現在の価格情報がありません（在庫切れの可能性）"}
+
+    price = price_raw / 100.0  # 円×100 → 円
+
+    return {"name": name, "price": price, "image": image, "asin": asin}
+
+
 # ── スクレイピング ─────────────────────────────────────────────────────
+
+def fetch_amazon_price(url: str) -> dict:
+    """Keepa API が設定されていれば優先使用、なければスクレイピングにフォールバック。"""
+    asin = extract_asin(url)
+    settings = load_settings()
+    keepa_key = settings.get("keepa_api_key", "")
+
+    if keepa_key and asin:
+        result = fetch_price_via_keepa(asin, keepa_key)
+        if "error" not in result:
+            return result
+        logger.warning("Keepa API 失敗 (%s)、スクレイピングにフォールバック", result["error"])
+
+    return _scrape_amazon_price(url)
+
 
 def clean_amazon_url(url: str) -> str:
     """トラッキングパラメータを除去してASINベースのシンプルなURLに変換する。"""
@@ -190,7 +266,7 @@ def clean_amazon_url(url: str) -> str:
     return url
 
 
-def fetch_amazon_price(url: str) -> dict:
+def _scrape_amazon_price(url: str) -> dict:
     clean_url = clean_amazon_url(url)
     sess = requests.Session()
     try:
@@ -344,6 +420,7 @@ def get_settings():
         "smtp_password_set": bool(s.get("smtp_password")),
         "chatwork_token_set": bool(s.get("chatwork_token")),
         "chatwork_room_id": s.get("chatwork_room_id", ""),
+        "keepa_api_key_set": bool(s.get("keepa_api_key")),
     })
 
 
@@ -359,6 +436,8 @@ def update_settings():
         settings["smtp_password"] = body["smtp_password"]
     if body.get("chatwork_token"):
         settings["chatwork_token"] = body["chatwork_token"]
+    if body.get("keepa_api_key"):
+        settings["keepa_api_key"] = body["keepa_api_key"]
     save_settings(settings)
     return jsonify({"ok": True})
 
