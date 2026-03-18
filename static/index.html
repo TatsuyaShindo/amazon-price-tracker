@@ -63,6 +63,89 @@
     }
     #checkAllBtn:hover { background: var(--primary-dark); }
     #checkAllBtn:disabled { opacity: .6; cursor: not-allowed; }
+    .btn-settings {
+      background: rgba(255,255,255,.12);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,.25);
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background .2s;
+    }
+    .btn-settings:hover { background: rgba(255,255,255,.22); }
+    .btn-logout {
+      background: transparent;
+      color: #aab;
+      border: 1px solid rgba(255,255,255,.15);
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all .2s;
+    }
+    .btn-logout:hover { color: #fff; border-color: rgba(255,255,255,.35); }
+
+    /* ─── Settings Modal ─── */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.5);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .2s;
+    }
+    .modal-overlay.open { opacity: 1; pointer-events: all; }
+    .modal {
+      background: #fff;
+      border-radius: 18px;
+      padding: 32px;
+      width: 100%;
+      max-width: 480px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.25);
+      transform: translateY(20px);
+      transition: transform .2s;
+    }
+    .modal-overlay.open .modal { transform: translateY(0); }
+    .modal h2 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+    .modal .modal-sub { font-size: 12px; color: var(--muted); margin-bottom: 24px; }
+    .modal-section { margin-bottom: 20px; }
+    .modal-section label { display: block; font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 5px; }
+    .modal-section input {
+      width: 100%;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 9px 12px;
+      font-size: 14px;
+      outline: none;
+      transition: border .2s;
+    }
+    .modal-section input:focus { border-color: var(--primary); }
+    .modal-row { display: flex; gap: 10px; }
+    .modal-row input:first-child { flex: 2; }
+    .modal-row input:last-child { flex: 1; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 24px; }
+    .modal-actions button {
+      flex: 1;
+      border: none;
+      border-radius: 8px;
+      padding: 11px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s;
+    }
+    .modal-actions button:hover { opacity: .85; }
+    .btn-save-settings { background: var(--primary); color: #fff; }
+    .btn-test-email { background: #e8f0fe; color: #1a73e8; }
+    .btn-close-modal { background: var(--border); color: var(--muted); flex: 0 0 auto; padding: 11px 18px; }
+    .modal-alert { font-size: 13px; border-radius: 8px; padding: 9px 14px; margin-top: 14px; display: none; }
+    .modal-alert.error { background: #ffebee; color: var(--danger); display: block; }
+    .modal-alert.success { background: var(--success-light); color: var(--success); display: block; }
 
     /* ─── Main ─── */
     main { max-width: 960px; margin: 32px auto; padding: 0 20px; }
@@ -366,10 +449,48 @@
   <span style="color:var(--primary);font-size:20px">📦</span>
   <span class="subtitle">価格追跡ダッシュボード</span>
   <span class="spacer"></span>
+  <button class="btn-settings" onclick="openSettings()">⚙️ 設定</button>
   <button id="checkAllBtn" onclick="checkAll()">
     <span>🔄</span> 全商品チェック
   </button>
+  <button class="btn-logout" onclick="doLogout()">ログアウト</button>
 </header>
+
+<!-- 設定モーダル -->
+<div class="modal-overlay" id="settingsModal" onclick="closeSettingsOutside(event)">
+  <div class="modal">
+    <h2>⚙️ 設定</h2>
+    <p class="modal-sub">メール通知の設定を行います（Gmailのアプリパスワードを使用）</p>
+
+    <div class="modal-section">
+      <label>通知先メールアドレス</label>
+      <input type="email" id="notifyEmail" placeholder="通知を受け取るメールアドレス" />
+    </div>
+    <div class="modal-section">
+      <label>送信元 Gmail アドレス</label>
+      <input type="email" id="smtpUser" placeholder="送信に使うGmailアドレス" />
+    </div>
+    <div class="modal-section">
+      <label>Gmailアプリパスワード <span style="font-weight:400;color:var(--muted)">（Googleアカウント → セキュリティ → アプリパスワード）</span></label>
+      <input type="password" id="smtpPassword" placeholder="入力済みの場合は空欄でOK" />
+    </div>
+    <div class="modal-section">
+      <label>SMTPホスト / ポート</label>
+      <div class="modal-row">
+        <input type="text" id="smtpHost" value="smtp.gmail.com" />
+        <input type="number" id="smtpPort" value="587" />
+      </div>
+    </div>
+
+    <div class="modal-alert" id="settingsAlert"></div>
+
+    <div class="modal-actions">
+      <button class="btn-test-email" onclick="testEmail()">📧 テスト送信</button>
+      <button class="btn-save-settings" onclick="saveSettings()">保存</button>
+      <button class="btn-close-modal" onclick="closeSettings()">閉じる</button>
+    </div>
+  </div>
+</div>
 
 <main>
   <!-- 追加フォーム -->
@@ -672,6 +793,92 @@ function toggleHistory(id) {
   } else {
     el.classList.add("open");
     btn.textContent = "📋 価格履歴を隠す";
+  }
+}
+
+/* ─── ログアウト ─────────────────────────────── */
+async function doLogout() {
+  await fetch(`${API}/api/logout`, { method: "POST", credentials: "include" });
+  window.location.href = "/login";
+}
+
+/* ─── 設定モーダル ─────────────────────────────── */
+async function openSettings() {
+  const modal = document.getElementById("settingsModal");
+  modal.classList.add("open");
+  document.getElementById("settingsAlert").className = "modal-alert";
+  try {
+    const res = await fetch(`${API}/api/settings`, { credentials: "include" });
+    const s = await res.json();
+    document.getElementById("notifyEmail").value = s.notify_email || "";
+    document.getElementById("smtpUser").value = s.smtp_user || "";
+    document.getElementById("smtpHost").value = s.smtp_host || "smtp.gmail.com";
+    document.getElementById("smtpPort").value = s.smtp_port || 587;
+    document.getElementById("smtpPassword").placeholder = s.smtp_password_set
+      ? "設定済み（変更する場合のみ入力）"
+      : "アプリパスワードを入力";
+  } catch { }
+}
+
+function closeSettings() {
+  document.getElementById("settingsModal").classList.remove("open");
+}
+function closeSettingsOutside(e) {
+  if (e.target === document.getElementById("settingsModal")) closeSettings();
+}
+
+async function saveSettings() {
+  const alertEl = document.getElementById("settingsAlert");
+  alertEl.className = "modal-alert";
+  const body = {
+    notify_email: document.getElementById("notifyEmail").value.trim(),
+    smtp_user: document.getElementById("smtpUser").value.trim(),
+    smtp_host: document.getElementById("smtpHost").value.trim(),
+    smtp_port: parseInt(document.getElementById("smtpPort").value),
+  };
+  const pw = document.getElementById("smtpPassword").value;
+  if (pw) body.smtp_password = pw;
+  try {
+    const res = await fetch(`${API}/api/settings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      credentials: "include",
+    });
+    const data = await res.json();
+    if (res.ok) {
+      alertEl.textContent = "✅ 設定を保存しました";
+      alertEl.className = "modal-alert success";
+    } else {
+      alertEl.textContent = "❌ " + (data.error || "保存失敗");
+      alertEl.className = "modal-alert error";
+    }
+  } catch {
+    alertEl.textContent = "❌ サーバーエラー";
+    alertEl.className = "modal-alert error";
+  }
+}
+
+async function testEmail() {
+  const alertEl = document.getElementById("settingsAlert");
+  alertEl.textContent = "📧 送信中…";
+  alertEl.className = "modal-alert success";
+  try {
+    const res = await fetch(`${API}/api/settings/test-email`, {
+      method: "POST",
+      credentials: "include",
+    });
+    const data = await res.json();
+    if (res.ok) {
+      alertEl.textContent = "✅ テストメールを送信しました。受信ボックスを確認してください。";
+      alertEl.className = "modal-alert success";
+    } else {
+      alertEl.textContent = "❌ " + (data.error || "送信失敗");
+      alertEl.className = "modal-alert error";
+    }
+  } catch {
+    alertEl.textContent = "❌ サーバーエラー";
+    alertEl.className = "modal-alert error";
   }
 }
 
