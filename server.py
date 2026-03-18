@@ -179,15 +179,30 @@ def send_chatwork_notification(products_below: list) -> None:
 
 # ── スクレイピング ─────────────────────────────────────────────────────
 
+def clean_amazon_url(url: str) -> str:
+    """トラッキングパラメータを除去してASINベースのシンプルなURLに変換する。"""
+    asin = extract_asin(url)
+    if asin:
+        if "amazon.co.jp" in url:
+            return f"https://www.amazon.co.jp/dp/{asin}"
+        if "amazon.com" in url:
+            return f"https://www.amazon.com/dp/{asin}"
+    return url
+
+
 def fetch_amazon_price(url: str) -> dict:
+    clean_url = clean_amazon_url(url)
     sess = requests.Session()
     try:
-        resp = sess.get(url, headers=HEADERS, timeout=15)
+        resp = sess.get(clean_url, headers=HEADERS, timeout=15)
         resp.raise_for_status()
     except requests.RequestException as e:
         return {"error": f"ページ取得失敗: {e}"}
 
     soup = BeautifulSoup(resp.text, "html.parser")
+
+    if "robot" in resp.text.lower() or "captcha" in resp.text.lower():
+        return {"error": "Amazonにブロックされました。しばらく待ってから再試行してください。"}
 
     name_tag = soup.select_one("#productTitle")
     name = name_tag.get_text(strip=True) if name_tag else "商品名不明"
@@ -196,26 +211,39 @@ def fetch_amazon_price(url: str) -> dict:
     image = img_tag.get("src", "") if img_tag else ""
 
     price = None
-    for sel in [
-        ".a-price .a-offscreen",
+
+    # 優先度順に特定セクションを確認（誤セレクタを避ける）
+    specific_selectors = [
+        "#corePriceDisplay_desktop_feature_div .a-price:not(.a-text-price) .a-offscreen",
+        "#corePrice_feature_div .a-price:not(.a-text-price) .a-offscreen",
+        "#apex_desktop_newAccordionRow .a-price:not(.a-text-price) .a-offscreen",
         "#priceblock_ourprice",
         "#priceblock_dealprice",
         "#priceblock_saleprice",
-        "#corePrice_feature_div .a-offscreen",
-        "#apex_offerDisplay_desktop .a-offscreen",
         "#newBuyBoxPrice",
-        ".a-price-whole",
-    ]:
+        "#olpLinkWidget_feature_div .a-price:not(.a-text-price) .a-offscreen",
+        "#apex_offerDisplay_desktop .a-price:not(.a-text-price) .a-offscreen",
+    ]
+    for sel in specific_selectors:
         tag = soup.select_one(sel)
         if tag:
-            price = parse_price(tag.get_text(strip=True))
-            if price is not None:
+            p = parse_price(tag.get_text(strip=True))
+            if p is not None and p >= 100:  # ¥100未満は誤検知として除外
+                price = p
                 break
 
+    # 特定セレクタで見つからない場合、全 .a-price から100円以上の最小値を使用
     if price is None:
-        if "robot" in resp.text.lower() or "captcha" in resp.text.lower():
-            return {"error": "Amazonにブロックされました。しばらく待ってから再試行してください。"}
-        return {"error": "価格が見つかりませんでした"}
+        candidates = []
+        for tag in soup.select(".a-price:not(.a-text-price) .a-offscreen"):
+            p = parse_price(tag.get_text(strip=True))
+            if p is not None and p >= 100:
+                candidates.append(p)
+        if candidates:
+            price = min(candidates)  # 最安値（通常は販売価格）
+
+    if price is None:
+        return {"error": "価格が見つかりませんでした（在庫切れまたはページ構造の変更の可能性）"}
 
     return {"name": name, "price": price, "image": image, "asin": extract_asin(url)}
 
@@ -398,6 +426,8 @@ def add_product():
     except (ValueError, TypeError):
         return jsonify({"error": "目標価格は数値で入力してください"}), 400
 
+    # トラッキングパラメータを除去したURLで保存
+    url = clean_amazon_url(url)
     result = fetch_amazon_price(url)
     if "error" in result:
         product = {
