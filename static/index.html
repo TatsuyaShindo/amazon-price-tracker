@@ -317,6 +317,15 @@
 
     /* ─── History mini chart ─── */
     .history-section { margin-top: 10px; }
+    .keepa-link {
+      font-size: 13px;
+      color: var(--primary-dark);
+      font-weight: 600;
+      text-decoration: none;
+      display: inline-block;
+      margin-bottom: 6px;
+    }
+    .keepa-link:hover { text-decoration: underline; }
     .history-toggle {
       font-size: 12px;
       color: var(--primary-dark);
@@ -603,7 +612,7 @@ function updateStats(products) {
   bar.style.display = "flex";
   document.getElementById("totalCount").textContent = products.length;
   const alerts = products.filter(p =>
-    p.current_price != null && p.target_price != null && p.current_price <= p.target_price
+    p.current_price != null && p.current_price >= 100 && p.target_price != null && p.current_price <= p.target_price
   ).length;
   document.getElementById("alertCount").textContent = alerts;
   const latest = products
@@ -628,21 +637,25 @@ function renderProducts(products) {
   }
 
   grid.innerHTML = products.map(p => {
-    const hasPrice = p.current_price != null;
+    const validPrice = p.current_price != null && p.current_price >= 100;
     const hasTarget = p.target_price != null;
-    const isBelow = hasPrice && hasTarget && p.current_price <= p.target_price;
-    const isAbove = hasPrice && hasTarget && p.current_price > p.target_price;
+    const isBelow = validPrice && hasTarget && p.current_price <= p.target_price;
+    const isAbove = validPrice && hasTarget && p.current_price > p.target_price;
+    const priceError = p.current_price != null && p.current_price < 100;
 
     const cardClass = isBelow ? "below-target" : isAbove ? "above-target" : "";
     const priceClass = isBelow ? "below" : "";
 
     let diffBadge = "";
-    if (hasPrice && hasTarget) {
+    if (validPrice && hasTarget) {
       const diff = p.current_price - p.target_price;
       const sign = diff < 0 ? "▼" : "▲";
       const cls  = diff < 0 ? "down" : "up";
       diffBadge = `<span class="diff-badge ${cls}">${sign} ${fmt(Math.abs(diff))}</span>`;
     }
+
+    const asin = p.asin || (p.url && p.url.match(/\/dp\/([A-Z0-9]{10})/)?.[1]) || "";
+    const keepaUrl = asin ? `https://keepa.com/#!product/5-${asin}` : "";
 
     const historyItems = (p.history || []).slice().reverse().slice(0, 10).map(h =>
       `<div class="history-entry">
@@ -668,9 +681,11 @@ function renderProducts(products) {
         <div class="product-meta">最終チェック: ${fmtDate(p.last_checked)}</div>
 
         <div class="price-row">
-          ${hasPrice
+          ${validPrice
             ? `<span class="current-price ${priceClass}">${fmt(p.current_price)}</span>`
-            : `<span class="current-price no-price">価格取得中…</span>`}
+            : priceError
+              ? `<span class="current-price no-price">取得エラー（再チェックしてください）</span>`
+              : `<span class="current-price no-price">価格取得中…</span>`}
           ${hasTarget
             ? `<span class="target-label">目標 <span class="target-value">${fmt(p.target_price)}</span></span> ${diffBadge}`
             : `<span class="target-label" style="color:#bbb">目標未設定</span>`}
@@ -683,8 +698,10 @@ function renderProducts(products) {
           <button class="btn-icon btn-cancel" onclick="cancelEdit('${p.id}')">キャンセル</button>
         </div>
 
-        <!-- 履歴 -->
+        <!-- 履歴・Keepa -->
         <div class="history-section">
+          ${keepaUrl
+            ? `<a href="${keepaUrl}" target="_blank" rel="noopener" class="keepa-link">📈 Keepaで価格グラフを見る</a><br>` : ""}
           <button class="history-toggle" onclick="toggleHistory('${p.id}')">📋 価格履歴を表示</button>
           <div class="history-list" id="hist-${p.id}">
             ${historyItems || "<div style='font-size:12px;color:var(--muted)'>履歴なし</div>"}

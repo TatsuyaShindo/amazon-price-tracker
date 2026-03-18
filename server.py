@@ -234,6 +234,8 @@ def fetch_price_via_keepa(asin: str, api_key: str) -> dict:
         return {"error": "Keepa API: 現在の価格情報がありません（在庫切れの可能性）"}
 
     price = price_raw / 100.0  # 円×100 → 円
+    if price < 100:
+        return {"error": "Keepa API: 取得した価格が不正です（在庫・表示切れの可能性）"}
 
     return {"name": name, "price": price, "image": image, "asin": asin}
 
@@ -320,6 +322,8 @@ def _scrape_amazon_price(url: str) -> dict:
 
     if price is None:
         return {"error": "価格が見つかりませんでした（在庫切れまたはページ構造の変更の可能性）"}
+    if price < 100:
+        return {"error": "価格の取得に失敗しました（不正な値。Keepa APIの設定を推奨）"}
 
     return {"name": name, "price": price, "image": image, "asin": extract_asin(url)}
 
@@ -355,15 +359,20 @@ def check_all_prices() -> None:
             "price": result.get("price"),
             "error": result.get("error"),
         }
+        if result.get("price") is not None and result["price"] < 100:
+            entry["error"] = "価格の取得に失敗しました（不正な値）"
+            entry["price"] = None
         product.setdefault("history", []).append(entry)
 
-        if result.get("price") is not None:
+        if result.get("price") is not None and result["price"] >= 100:
             product["current_price"] = result["price"]
             product["last_checked"] = entry["checked_at"]
             if result.get("name") and result["name"] != "商品名不明":
                 product["name"] = result["name"]
             if result.get("image"):
                 product["image"] = result["image"]
+            if result.get("asin"):
+                product["asin"] = result["asin"]
             if product.get("target_price") is not None and result["price"] <= product["target_price"]:
                 products_below.append(product)
 
@@ -512,8 +521,9 @@ def add_product():
         product = {
             "id": str(uuid.uuid4()),
             "url": url,
-            "name": extract_asin(url) or url,
-            "image": "",
+            "asin": result.get("asin") or extract_asin(url),
+            "name": result.get("name") or extract_asin(url) or url,
+            "image": result.get("image", ""),
             "target_price": target_price,
             "current_price": None,
             "last_checked": None,
@@ -528,6 +538,7 @@ def add_product():
     product = {
         "id": str(uuid.uuid4()),
         "url": url,
+        "asin": result.get("asin") or extract_asin(url),
         "name": result["name"],
         "image": result.get("image", ""),
         "target_price": target_price,
@@ -583,14 +594,19 @@ def check_product(product_id):
                 "price": result.get("price"),
                 "error": result.get("error"),
             }
+            if result.get("price") is not None and result["price"] < 100:
+                entry["error"] = "価格の取得に失敗しました（不正な値）"
+                entry["price"] = None
             product.setdefault("history", []).append(entry)
-            if result.get("price") is not None:
+            if result.get("price") is not None and result["price"] >= 100:
                 product["current_price"] = result["price"]
                 product["last_checked"] = entry["checked_at"]
                 if result.get("name") and result["name"] != "商品名不明":
                     product["name"] = result["name"]
                 if result.get("image"):
                     product["image"] = result["image"]
+                if result.get("asin"):
+                    product["asin"] = result["asin"]
             save_data(data)
             if "error" in result:
                 return jsonify({"warning": result["error"], "product": product})
